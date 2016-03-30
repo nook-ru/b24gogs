@@ -1,55 +1,92 @@
-<?
-define("NOT_CHECK_PERMISSIONS", true);
-require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/prolog_before.php");
+<?php
+use Bitrix\Main\Text\Encoding;
+use Bitrix\Main\UserTable;
 
-$handle = fopen("php://input", "rb");
-while (!feof($handle)) {
-	$http_raw_post_data .= fread($handle, 8192);
-}
+define('GOGS_SECRET', '#CitrusGogs$secret');
+define('COMMIT_MESSAGE_TEMPLATE', "<b>Commit:</b> <a href=\"%s\">%s</a>\nBranch: %s\n%s");
+define('TASK_REGEXP', '@(?:(?:task_?)|(?:#)|(?:Задача №))([0-9]+)@i');
+define('NOT_CHECK_PERMISSIONS', true);
 
-fclose($handlle);
+require($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_before.php');
 
-$arData=json_decode($http_raw_post_data, true);
-
-$rsUser=CUser::GetList(($by="ID"), ($order="DESC"), array("UF_GITLAB_ID"=>$arData["user_id"]));
-$arUser=$rsUser->Fetch();
-if(!$arUser)
-	return;
-
-$GLOBALS["USER"]->Authorize($arUser["ID"]);
-
-$TASK_ID=false;
-if(preg_match("/task([0-9]+)/i", $arData["repository"]["name"], $r))
-	$TASK_ID=$r[1];
-elseif(preg_match("/task([0-9]+)/i", $arData["repository"]["description"], $r))
-	$TASK_ID=$r[1];
-elseif(preg_match("/task([0-9]+)/i", $arData["ref"], $r))
-	$TASK_ID=$r[1];
-
-CModule::IncludeModule("tasks");
-CModule::IncludeModule("forum");
-
-$branch=$arData["ref"];
-$branch=str_replace("refs/heads/", "", $branch);
-
-foreach($arData["commits"] as $arCommit)
+$handle = fopen('php://input', 'rb');
+$event = json_decode(stream_get_contents($handle), true);
+if (!is_array($event))
 {
-	$message=$arCommit["message"];
-	$message=utf8win1251($message);
-    if(preg_match("/task([0-9]+)/i", $message, $r))
-		$TASK_ID=$r[1];
-	if(!$TASK_ID)
-		continue;
-	$message=str_replace($r[0], "", $message);
-	
-	$rsTask=CTasks::GetList(array(), array("ID"=>$TASK_ID));
-	$arTask=$rsTask->Fetch();
-	if(!$arTask)
-		continue;
-	
-	CTaskComments::add($arTask["ID"], $arUser["ID"],
-        "<b>Commit:</b> <a href=".$arCommit["url"].">".substr($arCommit["id"], 0, 9)."</a>\nBranch: ".$branch."\n".$message);
+	throw new RuntimeException('Error decoding json request');
+}
+fclose($handle);
+
+if (GOGS_SECRET !== $event['secret'])
+{
+	throw new RuntimeException('Secret key mismatch');
 }
 
-require($_SERVER["DOCUMENT_ROOT"]."/bitrix/modules/main/include/epilog_after.php");
-?>
+$user = UserTable::getList(array(
+	'select' => array('ID'),
+	'filter' => array(
+		'=EMAIL' => $event['pusher']['email'],
+	),
+))->fetch();
+
+if (!is_array($user))
+{
+	throw new RuntimeException('User not found');
+}
+
+$GLOBALS['USER']->Authorize($user['ID']);
+
+$taskId = false;
+if (preg_match(TASK_REGEXP, $event['repository']['name'], $r))
+{
+	$taskId = $r[1];
+}
+elseif (preg_match(TASK_REGEXP, $event['repository']['description'], $r))
+{
+	$taskId = $r[1];
+}
+elseif (preg_match(TASK_REGEXP, $event['ref'], $r))
+{
+	$taskId = $r[1];
+}
+
+if (!\Bitrix\Main\Loader::includeModule('tasks'))
+{
+	throw new \Bitrix\Main\SystemException('Tasks module is not installed');
+}
+if (!\Bitrix\Main\Loader::includeModule('forum'))
+{
+	throw new \Bitrix\Main\SystemException('Forum module is not installed');
+}
+
+$branch = $event['ref'];
+$branch = str_replace('refs/heads/', '', $branch);
+
+foreach ($event['commits'] as $commit)
+{
+	$message = $commit['message'];
+	$message = Encoding::convertEncoding($message, 'utf-8', SITE_CHARSET);
+	if (preg_match(TASK_REGEXP, $message, $r))
+	{
+		$taskId = $r[1];
+	}
+	if (!$taskId)
+	{
+		continue;
+	}
+//	$message = str_replace($r[0], '', $message);
+
+	$task = CTasks::GetList(array(), array('ID' => $taskId))->Fetch();
+	if (!$task)
+	{
+		continue;
+	}
+
+	CTaskComments::add(
+		$task['ID'],
+		$user['ID'],
+		sprintf(COMMIT_MESSAGE_TEMPLATE, $commit['url'], substr($commit['id'], 0, 9), $branch, $message)
+	);
+}
+
+require($_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/main/include/epilog_after.php");
