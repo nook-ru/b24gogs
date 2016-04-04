@@ -2,8 +2,10 @@
 use Bitrix\Main\Text\Encoding;
 use Bitrix\Main\UserTable;
 
-define('GOGS_SECRET', '#CitrusGogs$secret');
-define('COMMIT_MESSAGE_TEMPLATE', "<b>Commit:</b> <a href=\"%s\">%s</a>\nBranch: %s\n%s");
+define('GOGS_SECRET', '');
+define('COMMIT_MESSAGE_TEMPLATE', '
+Запушил в ветку <b>$branch$</b>
+<a href="$commit_url$">$commit_hash$</a> $commit_desc$');
 define('TASK_REGEXP', '@(?:(?:task_?)|(?:#)|(?:Задача №))([0-9]+)@i');
 define('NOT_CHECK_PERMISSIONS', true);
 
@@ -74,7 +76,6 @@ foreach ($event['commits'] as $commit)
 	{
 		continue;
 	}
-//	$message = str_replace($r[0], '', $message);
 
 	$task = CTasks::GetList(array(), array('ID' => $taskId))->Fetch();
 	if (!$task)
@@ -82,10 +83,20 @@ foreach ($event['commits'] as $commit)
 		continue;
 	}
 
+	$fillTemplate = function($str, array $arguments)
+	{
+		return str_replace(array_keys($arguments), array_values($arguments), $str);
+	};
+
 	CTaskComments::add(
 		$task['ID'],
 		$user['ID'],
-		sprintf(COMMIT_MESSAGE_TEMPLATE, $commit['url'], substr($commit['id'], 0, 9), $branch, $message)
+		$fillTemplate(COMMIT_MESSAGE_TEMPLATE, array(
+			'$commit_url$' => $commit['url'],
+			'$commit_hash$' => substr($commit['id'], 0, 9),
+			'$commit_desc$' => $message,
+			'$branch$' => $branch,
+		))
 	);
 }
 
