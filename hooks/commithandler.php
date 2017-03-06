@@ -4,9 +4,9 @@ use Bitrix\Main\UserTable;
 
 define('GOGS_SECRET', '');
 define('COMMIT_MESSAGE_TEMPLATE', '
-Запушил в ветку <b>$branch$</b>
-<a href="$commit_url$">$commit_hash$</a> $commit_desc$');
-define('TASK_REGEXP', '@(?:(?:task_?)|(?:#)|(?:Задача №))([0-9]+)@i');
+Р—Р°РїСѓС€РёР» РІ РІРµС‚РєСѓ <b>$branch$</b>
+<a href="$commit_url$">$commit_hash$</a> $commit_message$');
+define('TASK_REGEXP', '@(?:(?:task_?)|(?:#)|(?:Р—Р°РґР°С‡Р° в„–))([0-9]+)@i');
 define('NOT_CHECK_PERMISSIONS', true);
 
 require($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_before.php');
@@ -88,16 +88,15 @@ foreach ($event['commits'] as $commit)
 		return str_replace(array_keys($arguments), array_values($arguments), $str);
 	};
 
-	CTaskComments::add(
-		$task['ID'],
-		$user['ID'],
-		$fillTemplate(COMMIT_MESSAGE_TEMPLATE, array(
+	$commentFields = array(
+		'POST_MESSAGE' => $fillTemplate(COMMIT_MESSAGE_TEMPLATE, array(
 			'$commit_url$' => $commit['url'],
 			'$commit_hash$' => substr($commit['id'], 0, 9),
-			'$commit_desc$' => $message,
+			'$commit_message$' => $message,
 			'$branch$' => $branch,
-		))
+		)),
 	);
+	CTaskCommentItem::add(CTaskItem::getInstance($task['ID'], $user['ID']), $commentFields);
 }
 
 require($_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/main/include/epilog_after.php");
