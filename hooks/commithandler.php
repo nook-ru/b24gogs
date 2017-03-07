@@ -1,27 +1,37 @@
 <?php
+
 use Bitrix\Main\Text\Encoding;
 use Bitrix\Main\UserTable;
 
-define('GOGS_SECRET', '');
+//define('GOGS_SECRET', 'secret key, указнный в gogs');
+
 define('COMMIT_MESSAGE_TEMPLATE', '
 Запушил в ветку <b>$branch$</b>
 <a href="$commit_url$">$commit_hash$</a> $commit_message$');
 define('TASK_REGEXP', '@(?:(?:task_?)|(?:#)|(?:Задача №))([0-9]+)@i');
+
 define('NOT_CHECK_PERMISSIONS', true);
 
 require($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_before.php');
 
 $handle = fopen('php://input', 'rb');
-$event = json_decode(stream_get_contents($handle), true);
+$requestPayload = stream_get_contents($handle);
+$event = json_decode($requestPayload, true);
 if (!is_array($event))
 {
 	throw new RuntimeException('Error decoding json request');
 }
 fclose($handle);
 
-if (GOGS_SECRET !== $event['secret'])
+/**
+ * Gogs передает SHA256 HMAC тела запроса в заголовке X-Gogs-Signature
+ */
+if (defined('GOGS_SECRET') && function_exists('hash_hmac'))
 {
-	throw new RuntimeException('Secret key mismatch');
+	if (hash_hmac('sha256', $requestPayload, GOGS_SECRET) != $_SERVER['X-Gogs-Signature'])
+	{
+		throw new RuntimeException('Secret key mismatch');
+	}
 }
 
 $user = UserTable::getList(array(
