@@ -1,7 +1,7 @@
 b24gogs
 ========
 
-Web-hooks for [Gogs](https://gogs.io/) to integrate with **Bitrix24 Self-hosted**.
+Web-hook handler for [Gogs](https://gogs.io/) to integrate with **Bitrix24 Self-hosted**. Adds pushed commits as comments to Bitrix24 tasks by their number in commit message.
 
 How to use
 ==========
@@ -10,6 +10,7 @@ How to use
 2. Put "hooks" folder anywhere within document root of your *Bitrix24*.
 3. All users MUST have same emails in *Gogs* and *Bitrix24*.
 4. Choose **WebHooks** in a project settings in *Gogs*, and fill in an URL for `commithandler.php`
+5. *Optionally* specify hook's Secret in `GOGS_SECRET` const
 5. Enjoy :)
 
 Distribution
